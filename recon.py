@@ -8,6 +8,12 @@
 #    option) any later version.
 #
 
+# TODO Use Amass
+# TODO Combine Amass and assetFinder Results
+# TODO Provide intel output from Amass
+# TODO Add DNS Takeover with Aquatone
+# TODO Add more recon with wayback
+
 import sys
 import os
 import argparse
@@ -31,6 +37,25 @@ def assetFinder(target):
     output.write(result.stdout)
     output.close()
 
+# amass subdomain enumeration
+#TODO wordlist?
+#TODO 
+def amass(target):
+    print(f'[-] amass on {target}')
+    path = os.path.abspath(os.path.join(target))
+    output = open(f'{path}/amass_subdomain.txt', 'a')
+    result = subprocess.run(['amass', 'enum', '-active', '-brute', stdout=subprocess.PIPE, text=True)
+    output.write(result.stdout)
+    output.close()
+
+#TODO amass IP intel on subdomains after comparing with asset finder
+
+#TODO combine those subdomain results then send to httprobe
+
+#TODO masscan results from amass intel make sure to cross reference domains from amass intel and assetfinder
+# while adding domains from amass to list going to  gowitness or add domains from assetfinder to intel scan 
+# for mass scan while
+
 def httProbe(assetPath):
     print('[-] Running HTTProbe')
     path = os.path.abspath(os.path.join(target))
@@ -47,7 +72,8 @@ def gowitness(filePath):
         for line in lines:
             subdomain = line.rstrip()
             print(f'[-] Running gowitness on {subdomain}')
-            subprocess.run(['gowitness', 'single', f'--url={subdomain}'], stdout=subprocess.PIPE, text=True)
+            # Change timeout to 10 for slow sites
+            subprocess.run(['gowitness', '--timeout', '10', 'single', f'--url={subdomain}'], stdout=subprocess.PIPE, text=True)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='A Python Web Reconaissance Tool')
