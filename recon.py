@@ -7,60 +7,96 @@
 #    GNU General Public License, either version 3 of the License, or (at your
 #    option) any later version.
 #
-
-# TODO Use Amass
-# TODO Combine Amass and assetFinder Results
+# TODO Configure tools with API tokens for subdomain enumeration
 # TODO Provide intel output from Amass
 # TODO Add DNS Takeover with Aquatone
 # TODO Add more recon with wayback
+# amass subdomain enumeration
+#TODO wordlist?
+#TODO Add rest of config settings from yml
+
+#TODO amass IP intel on subdomains after comparing with asset finder
+
+#TODO masscan results from amass intel make sure to cross reference domains from amass intel and assetfinder
+# while adding domains from amass to list going to  gowitness or add domains from assetfinder to intel scan
+# for mass scan while
 
 import sys
 import os
 import argparse
 import subprocess
 import shutil
+import yaml
 
-def checkFile(path):
+def checkfile(path):
     return os.path.isfile(path) and os.path.getsize(path) > 0
 
-def prepareDir(target):
-    targetDir = os.path.abspath(os.path.join(target))
-    os.makedirs(targetDir, exist_ok=True)
-    screenShotDir = os.path.abspath(os.path.join(target, 'gowitness'))
-    os.makedirs(screenShotDir, exist_ok=True)
+def prepare_dir(target):
+    target_dir = os.path.abspath(os.path.join(target))
+    os.makedirs(target_dir, exist_ok=True)
+    screenshot_dir = os.path.abspath(os.path.join(target, 'gowitness'))
+    os.makedirs(screenshot_dir, exist_ok=True)
 
-def assetFinder(target):
+def asset_finder(target, domains):
     print(f'[-] Running assetfinder on {target}')
     path = os.path.abspath(os.path.join(target))
     output = open(f'{path}/assetfinder.txt', 'a')
-    result = subprocess.run(['assetfinder', '--subs-only', target], stdout=subprocess.PIPE, text=True)
-    output.write(result.stdout)
+    for domain in domains:
+        print(f"Running assetfinder on {domain}")
+        result = subprocess.run(['assetfinder', '--subs-only', domain], stdout=subprocess.PIPE, text=True)
+        output.write(result.stdout)
     output.close()
 
-# amass subdomain enumeration
-#TODO wordlist?
-#TODO 
-def amass(target):
+def amass(target, domains, dns):
     print(f'[-] amass on {target}')
     path = os.path.abspath(os.path.join(target))
-    output = open(f'{path}/amass_subdomain.txt', 'a')
-    result = subprocess.run(['amass', 'enum', '-active', '-brute', stdout=subprocess.PIPE, text=True)
+    output = open(f'{path}/amass_output.txt', 'a')
+    outfile = f'{path}/amass.txt'
+    if len(domains) > 1:
+        domain = ",".join(domains)
+    else:
+        domain = domains[0]
+    if len(dns) > 1:
+        nameservers = ",".join(dns)
+    else:
+        nameservers = dns[0]
+    result = subprocess.run(['amass', 'enum', '-ip', '-r', nameservers, '-brute', '-d', domain, '-o', outfile], stdout=subprocess.PIPE, text=True)
     output.write(result.stdout)
     output.close()
+    subdomain_path = f'{path}/amass_subdomain.txt'
+    ip_path = f'{path}/amass_ip.txt'
+    subdomains = []
+    ips = []
+    with open(outfile) as file:
+        lines = file.readlines()
+        for line in lines:
+            split_lines = line.split(' ')
+            subdomains.append(split_lines[0])
+            ips.extend(split_lines[1].strip('\n').split(','))
+            ips = [ ip+'\n' for ip in ips]
+        with open(subdomain_path, 'w') as file:
+            file.writelines(sorted(set(subdomains)))
+        with open(ip_path, 'w') as file:
+            file.writelines(sorted(set(ips)))
 
-#TODO amass IP intel on subdomains after comparing with asset finder
+def combine(target):
+    print(f'[-] Combining on {target}')
+    path = os.path.abspath(os.path.join(target))
+    amass_path = f'{path}/assetfinder.txt'
+    assetfinder_path = f'{path}/amass_subdomain.txt'
+    with open(amass_path, 'r') as amass:
+        amass_subdomains = set(amass)
+    with open(assetfinder_path, 'r') as assetfinder:
+        assetfinder_subdomains = set(assetfinder)
+    combined = set(amass_subdomains|assetfinder_subdomains)
+    with open(f'{path}/combined_subdomain.txt', 'w') as file:
+        file.writelines(sorted(list(combined)))
 
-#TODO combine those subdomain results then send to httprobe
-
-#TODO masscan results from amass intel make sure to cross reference domains from amass intel and assetfinder
-# while adding domains from amass to list going to  gowitness or add domains from assetfinder to intel scan 
-# for mass scan while
-
-def httProbe(assetPath):
+def httprobe(asset_path):
     print('[-] Running HTTProbe')
     path = os.path.abspath(os.path.join(target))
     output = open(f'{path}/httprobe.txt', 'a')
-    result = subprocess.run(['httprobe'], stdin=open(assetPath, 'r'), stdout=subprocess.PIPE, text=True)
+    result = subprocess.run(['httprobe'], stdin=open(asset_path, 'r'), stdout=subprocess.PIPE, text=True)
     output.write(result.stdout)
     output.close()
 
@@ -72,35 +108,30 @@ def gowitness(filePath):
         for line in lines:
             subdomain = line.rstrip()
             print(f'[-] Running gowitness on {subdomain}')
-            # Change timeout to 10 for slow sites
             subprocess.run(['gowitness', '--timeout', '10', 'single', f'--url={subdomain}'], stdout=subprocess.PIPE, text=True)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='A Python Web Reconaissance Tool')
-    parser.add_argument('target', action='store', help='hostname (e.g. example.com example2.com) to scan.', nargs="*")
-    args = parser.parse_args()
+    with open('config.yaml', 'r') as f:
+        config = yaml.load(f)
 
-    if not args.target:
-        print('You must provide a target')
-        sys.exit(1)
-    elif len(args.target) > 1:
-        print('You must only provide ONE target')
-        sys.exit(1)
-    else:
-        target = args.target[0]
-        print(f'[-] Preparing to Scan {target}')
+    target = config["name"]
+    print(f'[-] Preparing to Scan {target}')
 
-    prepareDir(target)
-    assetFinder(target)
+    domains = []
+    domains = config["domains"]
+    dns = config["amass"]["dns"]
+    prepare_dir(target)
+    asset_finder(target, domains)
+    amass(target, domains, dns)
+    combine(target)
 
-    assetPath = f'{target}/assetfinder.txt'
-    if checkFile(assetPath):
-        httProbe(assetPath)
+    if checkfile(subdomains):
+         httprobe(subdomains)
 
     path = os.path.abspath(os.path.join(target))
-    httprobePath = f'{path}/httprobe.txt'
-    if checkFile(httprobePath):
-        gowitness(httprobePath)
+    httprobe_path = f'{path}/httprobe.txt'
+    if checkfile(httprobe_path):
+        gowitness(httprobe_path)
     else:
         print("Looks like there's nothing left to scan")
         sys.exit()
