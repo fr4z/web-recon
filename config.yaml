@@ -1,0 +1,27 @@
+name: tesla.com
+domains:
+  - static.tesla.com
+  - tcc-gw.tesla.com
+  - teamchat.tesla.com
+  - teamchatgl.tesla.com
+  - tesla.com
+  - teslacdpna0.tesla.com
+  - toolbox.tesla.com
+  - tradein.tesla.com
+  - trt.tesla.com
+  - tweventhook.tesla.com
+  - view.email.tesla.com
+  - view.emails.tesla.com
+  - vpn1.tesla.com
+  - warehouse.tesla.com
+  - webmail.tesla.com
+  - www.gridlogic.energy.tesla.com
+  - www.tesla.com
+  - xapps.tesla.com
+  - xmail.tesla.com
+amass:
+  dns:
+    - 1.1.1.1
+    - 8.8.8.8
+gowitness:
+    chrome_timeout: 10
